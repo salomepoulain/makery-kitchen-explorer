@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { Kitchen } from "./kitchen";
 
-const STASHED_BADGE = "↪";
 const GERM_BADGE = "*";
 
 class KitchenDecorations implements vscode.FileDecorationProvider {
@@ -26,10 +25,9 @@ class KitchenDecorations implements vscode.FileDecorationProvider {
       deco.color = new vscode.ThemeColor("makeryKitchen.ignoredForeground");
       deco.tooltip = "Ignored by git";
     }
-    if (v.stashed) {
-      deco.badge = STASHED_BADGE;
-      deco.tooltip = "Stashed: lives in __stash__ (bake shady)";
-    }
+    // VS Code already badges every symlink with ↪, so stashed paths only
+    // get a tooltip; a second badge would show up as "↪, ↪".
+    if (v.stashed) deco.tooltip = "Stashed: lives in __stash__ (bake shady)";
     return deco;
   }
 

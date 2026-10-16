@@ -2,7 +2,7 @@
   "name": "makery-kitchen-explorer",
   "displayName": "Makery Kitchen Explorer",
   "description": "Greys out git-ignored files instantly, dims makery germs (.dishsoap) and marks stashed contraband in the Explorer.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "salomepoulain",
   "license": "MIT",
   "engines": {

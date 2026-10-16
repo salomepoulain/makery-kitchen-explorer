@@ -3,3 +3,7 @@ out/test/**
 **/*.map
 tsconfig.json
 *.vsix
+.makery/**
+__trash__/**
+__stash__
+.gitignore

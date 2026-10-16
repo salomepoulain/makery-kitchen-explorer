@@ -6,7 +6,7 @@ A VS Code extension that shows what kind of kitchen mess each file is, right in 
 |---|---|---|
 | grey | git ignores it | `.gitignore` (every level), `.git/info/exclude`, your global excludes file |
 | dimmer grey + `*` | a germ: `bake germs` deletes it | `.makery/stations/*/workbench/.dishsoap` of every hired station |
-| `↪` | stashed: a symlink into `__stash__` | `bake shady` |
+| `↪` (VS Code's own symlink badge) + "Stashed" tooltip | stashed: a symlink into `__stash__` | `bake shady` |
 
 It reads those files itself instead of asking git, and keeps the answers in memory, so a folder
 shows the right colours the moment you open it. It reloads when a `.gitignore`, a `.dishsoap` or
