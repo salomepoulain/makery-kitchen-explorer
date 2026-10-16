@@ -2,7 +2,7 @@
   "name": "makery-kitchen-explorer",
   "displayName": "Makery Kitchen Explorer",
   "description": "Greys out git-ignored files instantly, dims makery germs (.dishsoap) and marks stashed contraband in the Explorer.",
-  "version": "0.1.2",
+  "version": "0.2.6",
   "publisher": "salomepoulain",
   "license": "MIT",
   "engines": {
@@ -29,15 +29,32 @@
       },
       {
         "id": "makeryKitchen.germForeground",
-        "description": "Germs: anything a hired station's .dishsoap lists (deleted by `bake germs`).",
+        "description": "Germs: anything a hired station's .dishsoap lists (deleted by `bake germs`). Mostly transparent.",
         "defaults": {
-          "dark": "#5A5A5A",
-          "light": "#B4B4B6",
-          "highContrast": "#7A7A7A",
-          "highContrastLight": "#B4B4B6"
+          "dark": "#CCCCCC33",
+          "light": "#61616133",
+          "highContrast": "#FFFFFF55",
+          "highContrastLight": "#29292955"
         }
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "makeryKitchen.toggleBadges",
+        "title": "Show Badges",
+        "category": "Makery Kitchen",
+        "toggled": "config.explorer.decorations.badges"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "makeryKitchen.toggleBadges",
+          "when": "view == workbench.explorer.fileView",
+          "group": "9_makeryKitchen"
+        }
+      ]
+    }
   },
   "scripts": {
     "compile": "tsc -p .",

@@ -4,7 +4,7 @@ import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { Kitchen } from "../kitchen";
+import { Kitchen, parseGitIgnored } from "../kitchen";
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "kitchen-test-")));
 const root = path.join(tmp, "proj");
@@ -34,7 +34,7 @@ for (const f of [
 ]) write(f);
 
 // Stash: __stash__ points at the shadow folder, .claude links into it.
-fs.mkdirSync(path.join(shadow, ".claude"), { recursive: true });
+fs.mkdirSync(path.join(shadow, ".claude", "skills"), { recursive: true });
 fs.symlinkSync(shadow, path.join(root, "__stash__"));
 fs.symlinkSync(path.join(shadow, ".claude"), path.join(root, ".claude"));
 fs.symlinkSync("/etc/hosts", path.join(root, "elsewhere-link")); // a symlink NOT into the stash
@@ -89,6 +89,7 @@ check("_empty_station's .dishsoap is skipped", () => assert.notStrictEqual(v("no
 
 console.log("## stashed (symlink into __stash__)");
 check(".claude is stashed", () => assert.strictEqual(v(".claude").stashed, true));
+check("inside a stashed folder is stashed", () => assert.strictEqual(v(".claude/skills").stashed, true));
 check("symlink elsewhere is not stashed", () => assert.strictEqual(v("elsewhere-link").stashed, false));
 check("__stash__ itself is not marked", () => assert.strictEqual(v("__stash__").stashed, false));
 check("plain file is not stashed", () => assert.strictEqual(v("normal.py").stashed, false));
@@ -103,6 +104,27 @@ fs.symlinkSync("/nowhere/x", path.join(root2, "other-dangling"));
 const k2 = new Kitchen(root2);
 check("dangling link into unsynced stash is stashed", () => assert.strictEqual(k2.verdict(path.join(root2, ".env")).stashed, true));
 check("dangling link elsewhere is not stashed", () => assert.strictEqual(k2.verdict(path.join(root2, "other-dangling")).stashed, false));
+
+console.log("## a folder moved aside for a moment is not remembered as missing");
+fs.renameSync(path.join(root, "data"), path.join(tmp, "data-aside"));
+v("data"); // asked while it's gone
+fs.renameSync(path.join(tmp, "data-aside"), path.join(root, "data"));
+check("data is ignored again once back", () => assert.strictEqual(v("data").look, "ignored"));
+
+console.log("## git status --ignored fills in folders whose contents are all ignored");
+write("toolcache/.gitignore", "# Automatically created by ruff.\n*\n");
+write("toolcache/0.16.10/x");
+write("toolcache/CACHEDIR.TAG");
+kitchen.forget(path.join(root, "toolcache"));
+check("before git: folder itself not ignored (like check-ignore)", () => assert.strictEqual(v("toolcache").look, undefined));
+check("before git: contents already ignored", () => assert.strictEqual(v("toolcache/CACHEDIR.TAG").look, "ignored"));
+const out = execFileSync("git", ["status", "--porcelain=v1", "-z", "--ignored"], { cwd: root, encoding: "utf8" });
+const changed = kitchen.setGitIgnored(parseGitIgnored(out, ""));
+check("after git: folder ignored", () => assert.strictEqual(v("toolcache").look, "ignored"));
+check("after git: the folder is reported as changed", () => assert.ok(changed.includes(path.join(root, "toolcache"))));
+check("after git: its already-ignored contents are not", () => assert.ok(!changed.includes(path.join(root, "toolcache/CACHEDIR.TAG"))));
+check("prefix: workspace below repo root", () =>
+  assert.deepStrictEqual([...parseGitIgnored("!! app/.venv/\0!! other/x\0?? app/new.py\0", "app/")], [".venv"]));
 
 console.log("## reload picks up .gitignore edits");
 write(".gitignore", "normal.py\n");

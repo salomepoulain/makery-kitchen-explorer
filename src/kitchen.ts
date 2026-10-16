@@ -11,7 +11,7 @@ export type Look = "germ" | "ignored" | undefined;
 
 export interface Verdict {
   look: Look;
-  stashed: boolean; // a symlink into __stash__
+  stashed: boolean; // a symlink into __stash__, or inside one
   germRoot: boolean; // the path a .dishsoap pattern names (not a child of it)
 }
 
@@ -54,6 +54,24 @@ function linkTargets(link: string): string[] {
   return out;
 }
 
+// `git status --porcelain=v1 -z --ignored` output -> ignored paths relative to
+// `root`. Porcelain paths are relative to the repo's top level, which can sit
+// above the workspace folder (`prefix` is the folder's path inside the repo).
+export function parseGitIgnored(out: string, prefix: string): Set<string> {
+  const set = new Set<string>();
+  const pre = prefix ? prefix.replace(/\/?$/, "/") : "";
+  for (const entry of out.split("\0")) {
+    if (!entry.startsWith("!! ")) continue;
+    let p = entry.slice(3).replace(/\/$/, "");
+    if (pre) {
+      if (!p.startsWith(pre)) continue;
+      p = p.slice(pre.length);
+    }
+    if (p) set.add(p);
+  }
+  return set;
+}
+
 // git reads core.excludesFile, or ~/.config/git/ignore when it isn't set.
 function globalExcludesFile(): string {
   const gitconfig = readLines(path.join(os.homedir(), ".gitconfig")) ?? "";
@@ -69,6 +87,10 @@ export class Kitchen {
   private germMatch: (rel: string) => boolean = () => false;
   private verdicts = new Map<string, Verdict>();
   private stashDirs: string[] = []; // where __stash__ points, see linkTargets
+  // Extra ignored paths from `git status --ignored`, relative to root. It folds
+  // a folder whose contents are all ignored into one entry (e.g. ruff's own
+  // `.ruff_cache/.gitignore` with `*`), which reading .gitignore files misses.
+  private gitIgnored = new Set<string>();
 
   constructor(readonly root: string) {
     this.reload();
@@ -78,6 +100,7 @@ export class Kitchen {
   reload(): void {
     this.dirLayers.clear();
     this.verdicts.clear();
+    this.gitIgnored.clear(); // based on the old rules; the next git run refills it
 
     this.baseLayers = [];
     for (const file of [globalExcludesFile(), path.join(this.root, ".git", "info", "exclude")]) {
@@ -110,6 +133,20 @@ export class Kitchen {
     this.stashDirs = lstat(stash)?.isSymbolicLink() ? linkTargets(stash) : [];
   }
 
+  // Swap in a new `git status --ignored` result (see parseGitIgnored) and
+  // return the paths whose verdict changed, so only those get redrawn.
+  setGitIgnored(entries: Set<string>): string[] {
+    const before = new Map(this.verdicts);
+    this.gitIgnored = entries;
+    this.verdicts.clear();
+    const changed: string[] = [];
+    for (const [rel, old] of before) {
+      const now = this.verdict(path.join(this.root, rel));
+      if (now.look !== old.look || now.stashed !== old.stashed) changed.push(path.join(this.root, rel));
+    }
+    return changed;
+  }
+
   // Forget one path (and anything below it) after it was created or deleted.
   forget(abs: string): void {
     const rel = this.rel(abs);
@@ -123,7 +160,9 @@ export class Kitchen {
     let v = this.verdicts.get(rel);
     if (!v) {
       v = this.compute(rel);
-      this.verdicts.set(rel, v);
+      // Don't remember paths that don't exist: `bake first` moves folders like
+      // .venv aside for a moment, and a cached "not there" would stick.
+      if (lstat(path.join(this.root, rel))) this.verdicts.set(rel, v);
     }
     return v;
   }
@@ -143,11 +182,13 @@ export class Kitchen {
     const germRoot = this.germMatch(rel);
     const germ = germRoot || parent.look === "germ";
     // git never looks inside an ignored folder, so its children stay ignored.
-    const ignored = germ || parent.look === "ignored" || this.isIgnored(rel, st);
+    const ignored =
+      germ || parent.look === "ignored" || this.gitIgnored.has(rel) || this.isIgnored(rel, st);
 
     return {
       look: germ ? "germ" : ignored ? "ignored" : undefined,
-      stashed: this.isStashed(rel, st),
+      // Everything inside a stashed folder lives in the stash too.
+      stashed: parent.stashed || this.isStashed(rel, st),
       germRoot,
     };
   }
