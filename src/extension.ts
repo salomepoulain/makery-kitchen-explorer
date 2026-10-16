@@ -1,7 +1,11 @@
+import * as fs from "fs";
+import * as path from "path";
 import * as vscode from "vscode";
 import { Kitchen } from "./kitchen";
 
 const GERM_BADGE = "*";
+// How many paths the warm-up walk looks at per workspace folder, nearest first.
+const WARM_LIMIT = 20000;
 
 class KitchenDecorations implements vscode.FileDecorationProvider {
   private kitchens = new Map<string, Kitchen>();
@@ -35,6 +39,50 @@ class KitchenDecorations implements vscode.FileDecorationProvider {
   reloadAll(): void {
     for (const k of this.kitchens.values()) k.reload();
     this.changed.fire(undefined);
+    this.warmAll();
+  }
+
+  // VS Code only asks for a decoration once a row is on screen, then redraws
+  // when the answer arrives: that's the visible wait when opening a folder.
+  // Announcing a path as changed makes VS Code fetch and cache its decoration
+  // right away, so walk the project ahead of time and announce every path
+  // that looks different. Undecorated paths need nothing.
+  warmAll(): void {
+    for (const folder of vscode.workspace.workspaceFolders ?? []) void this.warm(folder.uri);
+  }
+
+  private async warm(rootUri: vscode.Uri): Promise<void> {
+    const kitchen = this.kitchenFor(rootUri);
+    if (!kitchen) return;
+    const queue = [rootUri.fsPath];
+    let batch: vscode.Uri[] = [];
+    let seen = 0;
+    while (queue.length && seen < WARM_LIMIT) {
+      const dir = queue.shift()!;
+      let entries: fs.Dirent[];
+      try {
+        entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const e of entries) {
+        if (e.name === ".git" || e.name === "node_modules") continue;
+        const abs = path.join(dir, e.name);
+        seen++;
+        const v = kitchen.verdict(abs);
+        if (v.look || v.stashed) batch.push(vscode.Uri.file(abs));
+        // Walk your own folders completely. Ignored ones (.venv, caches, data)
+        // only one level deep: opening them is instant, digging deeper may wait.
+        // Dirent doesn't follow symlinks, so the stash isn't walked.
+        if (e.isDirectory() && !kitchen.verdict(dir).look) queue.push(abs);
+      }
+      if (batch.length >= 500) {
+        this.changed.fire(batch);
+        batch = [];
+        await new Promise((r) => setImmediate(r)); // let VS Code breathe between batches
+      }
+    }
+    if (batch.length) this.changed.fire(batch);
   }
 
   // One path appeared or disappeared.
@@ -48,6 +96,7 @@ class KitchenDecorations implements vscode.FileDecorationProvider {
   dropKitchens(): void {
     this.kitchens.clear();
     this.changed.fire(undefined);
+    this.warmAll();
   }
 
   private kitchenFor(uri: vscode.Uri): Kitchen | undefined {
@@ -66,6 +115,7 @@ class KitchenDecorations implements vscode.FileDecorationProvider {
 export function activate(context: vscode.ExtensionContext): void {
   const decorations = new KitchenDecorations();
   context.subscriptions.push(vscode.window.registerFileDecorationProvider(decorations));
+  decorations.warmAll();
 
   const rules = vscode.workspace.createFileSystemWatcher(
     "{**/.gitignore,.git/info/exclude,.makery/stations/*/workbench/.dishsoap,__stash__}"
