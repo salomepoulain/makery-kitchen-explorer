@@ -1,0 +1,11 @@
+node_modules/
+out/
+*.vsix
+.makery/
+.contraband
+.before/
+.after/
+__trash__/
+__stash__
+todo
+TODO

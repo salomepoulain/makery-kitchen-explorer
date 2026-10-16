@@ -1,0 +1,58 @@
+{
+  "name": "makery-kitchen-explorer",
+  "displayName": "Makery Kitchen Explorer",
+  "description": "Greys out git-ignored files instantly, dims makery germs (.dishsoap) and marks stashed contraband in the Explorer.",
+  "version": "0.1.0",
+  "publisher": "salomepoulain",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "colors": [
+      {
+        "id": "makeryKitchen.ignoredForeground",
+        "description": "Git-ignored files and folders in the Explorer.",
+        "defaults": {
+          "dark": "#8C8C8C",
+          "light": "#8E8E90",
+          "highContrast": "#A7A8A9",
+          "highContrastLight": "#8E8E90"
+        }
+      },
+      {
+        "id": "makeryKitchen.germForeground",
+        "description": "Germs: anything a hired station's .dishsoap lists (deleted by `bake germs`).",
+        "defaults": {
+          "dark": "#5A5A5A",
+          "light": "#B4B4B6",
+          "highContrast": "#7A7A7A",
+          "highContrastLight": "#B4B4B6"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "test": "npm run compile && node out/test/kitchen.test.js",
+    "package": "npm run compile && vsce package --skip-license"
+  },
+  "dependencies": {
+    "ignore": "5.3.2",
+    "picomatch": "4.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "20.17.6",
+    "@types/picomatch": "3.0.1",
+    "@types/vscode": "1.90.0",
+    "@vscode/vsce": "3.2.1",
+    "typescript": "5.6.3"
+  }
+}
